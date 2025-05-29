@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Card Board Game</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="lobby" class="screen">
+  <h1>Lobby</h1>
+  <button onclick="showScreen('collection')">Collection</button>
+  <button onclick="showScreen('deck')">Decks</button>
+  <button onclick="showScreen('shop')">Shop</button>
+  <button onclick="showScreen('battle')">Battle</button>
+  <button onclick="showScreen('arena')">Arena</button>
+  <button onclick="showScreen('admin')">Admin Panel</button>
+</div>
+
+<div id="collection" class="screen hidden">
+  <h2>Collection</h2>
+  <div id="rarityFilters"></div>
+  <div id="tagFilters"></div>
+  <div id="cardList" class="card-grid"></div>
+  <button onclick="backToLobby()">Back</button>
+</div>
+
+<div id="deck" class="screen hidden">
+  <h2>Deck Builder</h2>
+  <div id="deckTabs"></div>
+  <div id="deckCards" class="card-grid"></div>
+  <div id="collectionCards" class="card-grid small"></div>
+  <button onclick="backToLobby()">Back</button>
+</div>
+
+<div id="shop" class="screen hidden">
+  <h2>Shop</h2>
+  <div id="packs"></div>
+  <button onclick="backToLobby()">Back</button>
+</div>
+
+<div id="battle" class="screen hidden">
+  <h2>Battle</h2>
+  <div id="locations"></div>
+  <button onclick="startSimpleBattle()">Start Battle</button>
+  <div id="board" class="board hidden"></div>
+  <button onclick="backToLobby()">Back</button>
+</div>
+
+<div id="arena" class="screen hidden">
+  <h2>Arena</h2>
+  <div id="arenas"></div>
+  <button onclick="backToLobby()">Back</button>
+</div>
+
+<div id="admin" class="screen hidden">
+  <h2>Admin Panel</h2>
+  <div>
+    <button onclick="showAdmin('cards')">Cards</button>
+    <button onclick="showAdmin('packs')">Packs</button>
+    <button onclick="showAdmin('enemies')">Enemies</button>
+    <button onclick="showAdmin('arenas')">Arenas</button>
+    <button onclick="showAdmin('fields')">Fields</button>
+  </div>
+  <div id="adminContent"></div>
+  <button onclick="backToLobby()">Back</button>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
