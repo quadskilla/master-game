@@ -4,6 +4,8 @@ function showScreen(id){ screens.forEach(s=>document.getElementById(s).classList
 window.showScreen=showScreen;
 window.backToLobby=()=>showScreen('lobby');
 
+let battleState = null;
+
 let data = JSON.parse(localStorage.getItem('gameData')||'null');
 if(!data){
   data={cards:[],packs:[],enemies:[],arenas:[],fields:[],decks:[[],[],[],[]],activeDeck:0,collection:{}};
@@ -38,8 +40,88 @@ function countInDeck(id,d){return data.decks[d].filter(x=>x===id).length;}
 function renderShop(){const div=document.getElementById('packs');div.innerHTML='';data.packs.forEach(p=>{const b=document.createElement('button');b.textContent=p.name+' - '+p.price+'g';b.onclick=()=>{openPack(p)};div.appendChild(b);});}
 function openPack(p){const results=[];for(let i=0;i<5;i++){const cid=p.cards[Math.floor(Math.random()*p.cards.length)];results.push(cid);addCopies(cid,1);}save();alert('You got: '+results.join(', '));}
 
-function renderLocations(){document.getElementById('board').classList.add('hidden');}
-function startSimpleBattle(){const board=document.getElementById('board');board.innerHTML='';for(let y=0;y<12;y++){for(let x=0;x<12;x++){const cell=document.createElement('div');cell.className='cell';cell.dataset.x=x;cell.dataset.y=y;board.appendChild(cell);}}const hero=document.createElement('div');hero.className='cell hero';hero.textContent='H';board.children[0].replaceWith(hero);const enemy=document.createElement('div');enemy.className='cell enemy-hero';enemy.textContent='E';board.children[143].replaceWith(enemy);board.classList.remove('hidden');}
+function renderLocations(){
+  document.getElementById('board').classList.add('hidden');
+  document.getElementById('battleInfo').classList.add('hidden');
+  window.removeEventListener('keydown', handleBattleKey);
+  battleState = null;
+}
+
+function startSimpleBattle(){
+  const board = document.getElementById('board');
+  const info = document.getElementById('battleInfo');
+  board.innerHTML='';
+  for(let y=0;y<12;y++){
+    for(let x=0;x<12;x++){
+      const cell=document.createElement('div');
+      cell.className='cell';
+      cell.dataset.x=x;
+      cell.dataset.y=y;
+      board.appendChild(cell);
+    }
+  }
+  battleState = {hero:{x:0,y:0,hp:5}, enemy:{x:11,y:11,hp:5}};
+  placeUnit('hero');
+  placeUnit('enemy');
+  info.classList.remove('hidden');
+  board.classList.remove('hidden');
+  updateBattleInfo();
+  window.addEventListener('keydown', handleBattleKey);
+}
+
+function getCell(x,y){
+  return document.querySelector(`#board .cell[data-x="${x}"][data-y="${y}"]`);
+}
+
+function placeUnit(role){
+  const pos=battleState[role];
+  const cell=getCell(pos.x,pos.y);
+  cell.textContent=role==='hero'?'H':'E';
+  cell.classList.add(role==='hero'?'hero':'enemy-hero');
+}
+
+function moveUnit(role,nx,ny){
+  const pos=battleState[role];
+  if(nx<0||ny<0||nx>11||ny>11) return;
+  const oldCell=getCell(pos.x,pos.y);
+  oldCell.textContent='';
+  oldCell.className='cell';
+  pos.x=nx; pos.y=ny;
+  placeUnit(role);
+}
+
+function handleBattleKey(e){
+  if(!battleState) return;
+  const h=battleState.hero;
+  if(e.key==='ArrowUp') moveUnit('hero',h.x,h.y-1);
+  else if(e.key==='ArrowDown') moveUnit('hero',h.x,h.y+1);
+  else if(e.key==='ArrowLeft') moveUnit('hero',h.x-1,h.y);
+  else if(e.key==='ArrowRight') moveUnit('hero',h.x+1,h.y);
+  checkCombat();
+}
+
+function checkCombat(){
+  const h=battleState.hero;
+  const e=battleState.enemy;
+  const dist=Math.abs(h.x-e.x)+Math.abs(h.y-e.y);
+  if(dist<=1){
+    e.hp--; h.hp--;
+    updateBattleInfo();
+    if(e.hp<=0){
+      alert('Enemy defeated!');
+      renderLocations();
+    } else if(h.hp<=0){
+      alert('You were defeated!');
+      renderLocations();
+    }
+  }
+}
+
+function updateBattleInfo(){
+  const info=document.getElementById('battleInfo');
+  if(!battleState){info.textContent='';return;}
+  info.textContent=`Hero HP: ${battleState.hero.hp} | Enemy HP: ${battleState.enemy.hp}`;
+}
 
 function renderArenas(){const div=document.getElementById('arenas');div.innerHTML='';data.arenas.forEach(a=>{const b=document.createElement('button');b.textContent=a.name;b.onclick=()=>alert('Start arena '+a.name);div.appendChild(b);});}
 
