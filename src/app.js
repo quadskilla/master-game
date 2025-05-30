@@ -43,12 +43,14 @@ function openPack(p){const results=[];for(let i=0;i<5;i++){const cid=p.cards[Mat
 function renderLocations(){
   document.getElementById('board').classList.add('hidden');
   document.getElementById('battleInfo').classList.add('hidden');
+  document.getElementById('battleArea').classList.add('hidden');
   window.removeEventListener('keydown', handleBattleKey);
   battleState = null;
 }
 
-function startSimpleBattle(){
+function startBattle(){
   const board = document.getElementById('board');
+  const area = document.getElementById('battleArea');
   const info = document.getElementById('battleInfo');
   board.innerHTML='';
   for(let y=0;y<12;y++){
@@ -57,16 +59,145 @@ function startSimpleBattle(){
       cell.className='cell';
       cell.dataset.x=x;
       cell.dataset.y=y;
+      cell.addEventListener('click',()=>cellClicked(cell));
       board.appendChild(cell);
     }
   }
-  battleState = {hero:{x:0,y:0,hp:5}, enemy:{x:11,y:11,hp:5}};
+  const deck=[...data.decks[data.activeDeck]];
+  shuffle(deck);
+  const enemyDeck=[...deck];
+  battleState={
+    hero:{x:0,y:0,hp:10,energy:0,deck,hand:[],units:[]},
+    enemy:{x:11,y:11,hp:10,energy:0,deck:enemyDeck,hand:[],units:[]},
+    turn:'player',actions:0,selected:null,selectingSummon:null
+  };
+  drawCards('hero',3);
+  drawCards('enemy',3);
   placeUnit('hero');
   placeUnit('enemy');
   info.classList.remove('hidden');
-  board.classList.remove('hidden');
-  updateBattleInfo();
+  area.classList.remove('hidden');
+  updatePanels();
+  startTurn();
+}
+
+function shuffle(a){
+  for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}
+}
+
+function drawCards(role,n){
+  const p=battleState[role];
+  for(let i=0;i<n;i++){
+    if(p.deck.length===0) break;
+    const c=p.deck.shift();
+    if(p.hand.length<6) p.hand.push(c);
+  }
+}
+
+function startTurn(){
+  if(battleState.turn==='player'){
+    chooseStartOption();
+  }else{
+    enemyTurn();
+  }
+}
+
+function chooseStartOption(){
+  const actions=document.getElementById('actions');
+  actions.innerHTML='';
+  const opt1=document.createElement('button');opt1.textContent='Buy 2 Cards';
+  const opt2=document.createElement('button');opt2.textContent='Buy 1 + 3 Energy';
+  const opt3=document.createElement('button');opt3.textContent='Gain 6 Energy';
+  actions.appendChild(opt1);actions.appendChild(opt2);actions.appendChild(opt3);
+  opt1.onclick=()=>{drawCards('hero',2);beginActionPhase();};
+  opt2.onclick=()=>{drawCards('hero',1);battleState.hero.energy+=3;beginActionPhase();};
+  opt3.onclick=()=>{battleState.hero.energy+=6;beginActionPhase();};
+}
+
+function beginActionPhase(){
+  battleState.actions=3;
+  updatePanels();
+  const actionsDiv=document.getElementById('actions');
+  actionsDiv.innerHTML+= '<button id="endTurn">End Turn</button>';
+  document.getElementById('endTurn').onclick=()=>{battleState.turn='enemy';startTurn();};
   window.addEventListener('keydown', handleBattleKey);
+}
+
+function enemyTurn(){
+  window.removeEventListener('keydown', handleBattleKey);
+  battleState.enemy.energy+=6;
+  battleState.actions=3;
+  while(battleState.actions>0){
+    aiMoveTowardHero();
+    battleState.actions--;checkCombat();
+    if(!battleState) return;
+  }
+  battleState.turn='player';
+  startTurn();
+}
+
+function aiMoveTowardHero(){
+  const e=battleState.enemy;const h=battleState.hero;
+  let dx=h.x>e.x?1:h.x<e.x?-1:0;
+  let dy=h.y>e.y?1:h.y<e.y?-1:0;
+  moveUnit('enemy',e.x+dx,e.y+dy);
+  updatePanels();
+}
+
+function updatePanels(){
+  document.getElementById('heroPanel').innerHTML=`<h3>Hero</h3><p>HP:${battleState.hero.hp}</p><p>Energy:${battleState.hero.energy}</p>`;
+  document.getElementById('enemyPanel').innerHTML=`<h3>Enemy</h3><p>HP:${battleState.enemy.hp}</p>`;
+  const hand=document.getElementById('hand');
+  hand.innerHTML='';
+  battleState.hero.hand.forEach((cid,idx)=>{
+    const c=data.cards.find(x=>x.id===cid);
+    const div=document.createElement('div');div.className='card';div.innerHTML=`<img src="${c.img}"><div class="info">${c.name}</div>`;
+    div.onclick=()=>selectCard(idx);
+    hand.appendChild(div);
+  });
+  const actionsDiv=document.getElementById('actions');
+  actionsDiv.textContent=`Actions: ${battleState.actions} `;
+  document.getElementById('battleInfo').textContent=`Hero HP: ${battleState.hero.hp} | Enemy HP: ${battleState.enemy.hp}`;
+}
+
+function selectCard(index){
+  const cid=battleState.hero.hand[index];
+  const card=data.cards.find(x=>x.id===cid);
+  if(card.type==='minion'){
+    battleState.selectingSummon={cardIndex:index};
+    highlightSummon();
+  }
+}
+
+function highlightSummon(){
+  clearHighlights();
+  const h=battleState.hero;
+  for(let y=h.y-1;y<=h.y+1;y++){
+    for(let x=h.x-1;x<=h.x+1;x++){
+      if(x===h.x && y===h.y) continue;
+      const cell=getCell(x,y);if(!cell) continue;
+      if(!cell.textContent){cell.classList.add('highlight-move');}
+    }
+  }
+}
+
+function clearHighlights(){
+  document.querySelectorAll('#board .cell').forEach(c=>{c.classList.remove('highlight-move','highlight-attack');});
+}
+
+function cellClicked(cell){
+  if(battleState.selectingSummon){
+    if(!cell.classList.contains('highlight-move')) return;
+    const idx=battleState.selectingSummon.cardIndex;
+    const cid=battleState.hero.hand.splice(idx,1)[0];
+    const x=Number(cell.dataset.x);const y=Number(cell.dataset.y);
+    const unit={owner:'hero',x,y};
+    battleState.hero.units.push(unit);
+    placeMinion(unit);
+    clearHighlights();
+    battleState.selectingSummon=null;
+    updatePanels();
+  }
 }
 
 function getCell(x,y){
@@ -78,6 +209,12 @@ function placeUnit(role){
   const cell=getCell(pos.x,pos.y);
   cell.textContent=role==='hero'?'H':'E';
   cell.classList.add(role==='hero'?'hero':'enemy-hero');
+}
+
+function placeMinion(m){
+  const cell=getCell(m.x,m.y);
+  cell.textContent='M';
+  cell.classList.add(m.owner==='hero'?'hero':'enemy-hero');
 }
 
 function moveUnit(role,nx,ny){
@@ -93,11 +230,13 @@ function moveUnit(role,nx,ny){
 function handleBattleKey(e){
   if(!battleState) return;
   const h=battleState.hero;
-  if(e.key==='ArrowUp') moveUnit('hero',h.x,h.y-1);
-  else if(e.key==='ArrowDown') moveUnit('hero',h.x,h.y+1);
-  else if(e.key==='ArrowLeft') moveUnit('hero',h.x-1,h.y);
-  else if(e.key==='ArrowRight') moveUnit('hero',h.x+1,h.y);
+  if(battleState.actions<=0) return;
+  if(e.key==='ArrowUp') {moveUnit('hero',h.x,h.y-1);battleState.actions--;}
+  else if(e.key==='ArrowDown') {moveUnit('hero',h.x,h.y+1);battleState.actions--;}
+  else if(e.key==='ArrowLeft') {moveUnit('hero',h.x-1,h.y);battleState.actions--;}
+  else if(e.key==='ArrowRight') {moveUnit('hero',h.x+1,h.y);battleState.actions--;}
   checkCombat();
+  updatePanels();
 }
 
 function checkCombat(){
@@ -106,7 +245,7 @@ function checkCombat(){
   const dist=Math.abs(h.x-e.x)+Math.abs(h.y-e.y);
   if(dist<=1){
     e.hp--; h.hp--;
-    updateBattleInfo();
+    updatePanels();
     if(e.hp<=0){
       alert('Enemy defeated!');
       renderLocations();
@@ -117,11 +256,6 @@ function checkCombat(){
   }
 }
 
-function updateBattleInfo(){
-  const info=document.getElementById('battleInfo');
-  if(!battleState){info.textContent='';return;}
-  info.textContent=`Hero HP: ${battleState.hero.hp} | Enemy HP: ${battleState.enemy.hp}`;
-}
 
 function renderArenas(){const div=document.getElementById('arenas');div.innerHTML='';data.arenas.forEach(a=>{const b=document.createElement('button');b.textContent=a.name;b.onclick=()=>alert('Start arena '+a.name);div.appendChild(b);});}
 
