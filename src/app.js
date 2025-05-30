@@ -117,6 +117,7 @@ function chooseStartOption(){
 
 function beginActionPhase(){
   battleState.actions=3;
+  battleState.selected={type:'hero'};
   updatePanels();
   const actionsDiv=document.getElementById('actions');
   actionsDiv.innerHTML+= '<button id="endTurn">End Turn</button>';
@@ -182,6 +183,34 @@ function highlightSummon(){
   }
 }
 
+function highlightMoves(x,y){
+  clearHighlights();
+  for(let yy=y-1;yy<=y+1;yy++){
+    for(let xx=x-1;xx<=x+1;xx++){
+      if(xx===x && yy===y) continue;
+      const c=getCell(xx,yy);if(!c) continue;
+      if(!c.textContent) c.classList.add('highlight-move');
+    }
+  }
+}
+
+function selectUnitAt(x,y){
+  const h=battleState.hero;
+  if(h.x===x && h.y===y){
+    battleState.selected={type:'hero'};
+    highlightMoves(x,y);
+    return;
+  }
+  const idx=h.units.findIndex(u=>u.x===x && u.y===y);
+  if(idx>=0){
+    battleState.selected={type:'minion',index:idx};
+    highlightMoves(x,y);
+    return;
+  }
+  battleState.selected=null;
+  clearHighlights();
+}
+
 function clearHighlights(){
   document.querySelectorAll('#board .cell').forEach(c=>{c.classList.remove('highlight-move','highlight-attack');});
 }
@@ -198,6 +227,15 @@ function cellClicked(cell){
     clearHighlights();
     battleState.selectingSummon=null;
     updatePanels();
+  } else if(cell.classList.contains('highlight-move') && battleState.selected){
+    const x=Number(cell.dataset.x);const y=Number(cell.dataset.y);
+    moveSelectedUnit(x,y);
+    battleState.actions--;checkCombat();
+    clearHighlights();
+    updatePanels();
+  } else {
+    const x=Number(cell.dataset.x);const y=Number(cell.dataset.y);
+    selectUnitAt(x,y);
   }
 }
 
@@ -228,14 +266,36 @@ function moveUnit(role,nx,ny){
   placeUnit(role);
 }
 
+function moveMinion(m,nx,ny){
+  if(nx<0||ny<0||nx>11||ny>11) return;
+  const oldCell=getCell(m.x,m.y);
+  oldCell.textContent='';
+  oldCell.className='cell';
+  m.x=nx; m.y=ny;
+  placeMinion(m);
+}
+
+function moveSelectedUnit(x,y){
+  if(battleState.selected){
+    if(battleState.selected.type==='hero') moveUnit('hero',x,y);
+    else moveMinion(battleState.hero.units[battleState.selected.index],x,y);
+  }
+}
+
 function handleBattleKey(e){
   if(!battleState) return;
-  const h=battleState.hero;
   if(battleState.actions<=0) return;
-  if(e.key==='ArrowUp') {moveUnit('hero',h.x,h.y-1);battleState.actions--;}
-  else if(e.key==='ArrowDown') {moveUnit('hero',h.x,h.y+1);battleState.actions--;}
-  else if(e.key==='ArrowLeft') {moveUnit('hero',h.x-1,h.y);battleState.actions--;}
-  else if(e.key==='ArrowRight') {moveUnit('hero',h.x+1,h.y);battleState.actions--;}
+  const sel=battleState.selected && battleState.selected.type==='minion'
+    ? battleState.hero.units[battleState.selected.index]
+    : battleState.hero;
+  let nx=sel.x, ny=sel.y;
+  if(e.key==='ArrowUp') ny--;
+  else if(e.key==='ArrowDown') ny++;
+  else if(e.key==='ArrowLeft') nx--;
+  else if(e.key==='ArrowRight') nx++;
+  else return;
+  moveSelectedUnit(nx,ny);
+  battleState.actions--;
   checkCombat();
   updatePanels();
 }
