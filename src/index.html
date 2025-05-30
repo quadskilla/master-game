@@ -41,9 +41,17 @@
 <div id="battle" class="screen hidden">
   <h2>Battle</h2>
   <div id="locations"></div>
-  <button onclick="startSimpleBattle()">Start Battle</button>
+  <button onclick="startBattle()">Start Battle</button>
+  <div id="battleArea" class="hidden">
+    <div class="panels">
+      <div id="enemyPanel" class="panel"></div>
+      <div id="heroPanel" class="panel"></div>
+    </div>
+    <div id="board" class="board"></div>
+    <div id="actions"></div>
+    <div id="hand" class="hand card-grid small"></div>
+  </div>
   <div id="battleInfo" class="battle-info hidden"></div>
-  <div id="board" class="board hidden"></div>
   <button onclick="backToLobby()">Back</button>
 </div>
 
