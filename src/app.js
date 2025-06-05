@@ -15,13 +15,13 @@ if(!data){
 function save(){localStorage.setItem('gameData',JSON.stringify(data));}
 
 function initDefaultData(){
-  const hero={id:'hero1',name:'Starter Hero',type:'hero',rarity:'common',tags:['warrior'],img:'https://via.placeholder.com/100',info:'Hero'};
+  const hero={id:'hero1',name:'Starter Hero',type:'hero',rarity:'common',tags:['warrior'],img:'https://via.placeholder.com/100',info:'Hero',cost:0};
   data.cards.push(hero);
   addCopies(hero.id,1);
   const minionNames=['MinionA','MinionB','MinionC','MinionD'];
-  minionNames.forEach((n,i)=>{let c={id:'m'+i,name:n,type:'minion',rarity:'common',tags:['pirate'],img:'https://via.placeholder.com/100',info:n};data.cards.push(c);addCopies(c.id,5);});
-  const spell={id:'s1',name:'Fireball',type:'spell',rarity:'common',img:'https://via.placeholder.com/100',info:'spell'};data.cards.push(spell);addCopies(spell.id,5);
-  const item={id:'i1',name:'Potion',type:'item',rarity:'common',img:'https://via.placeholder.com/100',info:'item'};data.cards.push(item);addCopies(item.id,5);
+  minionNames.forEach((n,i)=>{let c={id:'m'+i,name:n,type:'minion',rarity:'common',tags:['pirate'],img:'https://via.placeholder.com/100',info:n,cost:2};data.cards.push(c);addCopies(c.id,5);});
+  const spell={id:'s1',name:'Fireball',type:'spell',rarity:'common',img:'https://via.placeholder.com/100',info:'spell',cost:3};data.cards.push(spell);addCopies(spell.id,5);
+  const item={id:'i1',name:'Potion',type:'item',rarity:'common',img:'https://via.placeholder.com/100',info:'item',cost:1};data.cards.push(item);addCopies(item.id,5);
   data.decks[0]=['hero1','m0','m0','m1','m1','m2','m2','m3','m3','s1','i1'];
   while(data.decks[0].length<30) data.decks[0].push('m0');
   data.activeDeck=0;
@@ -66,9 +66,10 @@ function startBattle(){
   const deck=[...data.decks[data.activeDeck]];
   shuffle(deck);
   const enemyDeck=[...deck];
+  const heroCard=data.cards.find(c=>c.type==='hero');
   battleState={
-    hero:{x:0,y:0,hp:10,energy:0,deck,hand:[],units:[]},
-    enemy:{x:11,y:11,hp:10,energy:0,deck:enemyDeck,hand:[],units:[]},
+    hero:{x:0,y:0,hp:10,energy:0,atk:1,range:1,img:heroCard.img,deck,hand:[],units:[]},
+    enemy:{x:11,y:11,hp:10,energy:0,atk:1,range:1,img:heroCard.img,deck:enemyDeck,hand:[],units:[]},
     turn:'player',actions:0,selected:null,selectingSummon:null
   };
   drawCards('hero',3);
@@ -147,8 +148,14 @@ function aiMoveTowardHero(){
 }
 
 function updatePanels(){
-  document.getElementById('heroPanel').innerHTML=`<h3>Hero</h3><p>HP:${battleState.hero.hp}</p><p>Energy:${battleState.hero.energy}</p>`;
-  document.getElementById('enemyPanel').innerHTML=`<h3>Enemy</h3><p>HP:${battleState.enemy.hp}</p>`;
+  const heroPanel=document.getElementById('heroPanel');
+  const enemyPanel=document.getElementById('enemyPanel');
+  heroPanel.innerHTML=`<h3>Hero</h3><img class="hero-portrait" src="${battleState.hero.img}"><p>HP:${battleState.hero.hp}</p><p>Energy:${battleState.hero.energy}</p>`;
+  const heroUnits=battleState.hero.units.map(u=>`<div>HP:${u.hp} ATK:${u.atk}</div>`).join('');
+  heroPanel.innerHTML+=heroUnits;
+  enemyPanel.innerHTML=`<h3>Enemy</h3><img class="hero-portrait" src="${battleState.enemy.img}"><p>HP:${battleState.enemy.hp}</p>`;
+  const enemyUnits=battleState.enemy.units.map(u=>`<div>HP:${u.hp} ATK:${u.atk}</div>`).join('');
+  enemyPanel.innerHTML+=enemyUnits;
   const hand=document.getElementById('hand');
   hand.innerHTML='';
   battleState.hero.hand.forEach((cid,idx)=>{
@@ -174,22 +181,42 @@ function selectCard(index){
 function highlightSummon(){
   clearHighlights();
   const h=battleState.hero;
+  let spots=0;
   for(let y=h.y-1;y<=h.y+1;y++){
     for(let x=h.x-1;x<=h.x+1;x++){
       if(x===h.x && y===h.y) continue;
       const cell=getCell(x,y);if(!cell) continue;
-      if(!cell.textContent){cell.classList.add('highlight-move');}
+      if(!cell.textContent){cell.classList.add('highlight-move');spots++;}
     }
+  }
+  if(spots===0){
+    alert('No space to summon');
+    battleState.selectingSummon=null;
   }
 }
 
 function highlightMoves(x,y){
   clearHighlights();
+  const sel=battleState.selected && battleState.selected.type==='minion'
+    ? battleState.hero.units[battleState.selected.index]
+    : battleState.hero;
   for(let yy=y-1;yy<=y+1;yy++){
     for(let xx=x-1;xx<=x+1;xx++){
       if(xx===x && yy===y) continue;
       const c=getCell(xx,yy);if(!c) continue;
       if(!c.textContent) c.classList.add('highlight-move');
+    }
+  }
+  const range=sel.range||1;
+  for(let yy=y-range;yy<=y+range;yy++){
+    for(let xx=x-range;xx<=x+range;xx++){
+      if(Math.abs(xx-x)+Math.abs(yy-y)>range) continue;
+      const c=getCell(xx,yy);if(!c) continue;
+      if(c.classList.contains('highlight-move')){
+        c.classList.add('highlight-attack');
+      } else {
+        c.classList.add('highlight-attack');
+      }
     }
   }
 }
@@ -219,9 +246,18 @@ function cellClicked(cell){
   if(battleState.selectingSummon){
     if(!cell.classList.contains('highlight-move')) return;
     const idx=battleState.selectingSummon.cardIndex;
-    const cid=battleState.hero.hand.splice(idx,1)[0];
+    const cid=battleState.hero.hand[idx];
+    const card=data.cards.find(c=>c.id===cid);
+    if(battleState.hero.energy<card.cost){
+      alert('Not enough energy');
+      clearHighlights();
+      battleState.selectingSummon=null;
+      return;
+    }
+    battleState.hero.energy-=card.cost;
+    battleState.hero.hand.splice(idx,1);
     const x=Number(cell.dataset.x);const y=Number(cell.dataset.y);
-    const unit={owner:'hero',x,y};
+    const unit={owner:'hero',x,y,hp:2,atk:1,range:1};
     battleState.hero.units.push(unit);
     placeMinion(unit);
     clearHighlights();
@@ -233,6 +269,10 @@ function cellClicked(cell){
     battleState.actions--;checkCombat();
     clearHighlights();
     updatePanels();
+  } else if(cell.classList.contains('highlight-attack') && battleState.selected){
+    const x=Number(cell.dataset.x);const y=Number(cell.dataset.y);
+    attackSelectedUnit(x,y);
+    clearHighlights();
   } else {
     const x=Number(cell.dataset.x);const y=Number(cell.dataset.y);
     selectUnitAt(x,y);
@@ -246,7 +286,7 @@ function getCell(x,y){
 function placeUnit(role){
   const pos=battleState[role];
   const cell=getCell(pos.x,pos.y);
-  cell.textContent=role==='hero'?'H':'E';
+  cell.innerHTML=`<img src="${pos.img}" class="hero-image">`;
   cell.classList.add(role==='hero'?'hero':'enemy-hero');
 }
 
@@ -282,6 +322,37 @@ function moveSelectedUnit(x,y){
   }
 }
 
+function attackSelectedUnit(tx,ty){
+  if(!battleState.selected) return;
+  const attacker = battleState.selected.type==='hero'
+    ? battleState.hero
+    : battleState.hero.units[battleState.selected.index];
+  // check enemy hero
+  if(battleState.enemy.x===tx && battleState.enemy.y===ty){
+    battleState.enemy.hp -= attacker.atk || 1;
+    if(battleState.enemy.hp<=0){
+      alert('Enemy defeated!');
+      renderLocations();
+      return;
+    }
+  } else {
+    const idx=battleState.enemy.units.findIndex(u=>u.x===tx && u.y===ty);
+    if(idx>=0){
+      const target=battleState.enemy.units[idx];
+      target.hp -= attacker.atk || 1;
+      if(target.hp<=0){
+        battleState.enemy.units.splice(idx,1);
+        const c=getCell(tx,ty);
+        c.textContent='';
+        c.className='cell';
+      }
+    } else return;
+  }
+  battleState.actions--;
+  checkCombat();
+  updatePanels();
+}
+
 function handleBattleKey(e){
   if(!battleState) return;
   if(battleState.actions<=0) return;
@@ -305,15 +376,29 @@ function checkCombat(){
   const e=battleState.enemy;
   const dist=Math.abs(h.x-e.x)+Math.abs(h.y-e.y);
   if(dist<=1){
-    e.hp--; h.hp--;
-    updatePanels();
-    if(e.hp<=0){
-      alert('Enemy defeated!');
-      renderLocations();
-    } else if(h.hp<=0){
-      alert('You were defeated!');
-      renderLocations();
+    e.hp-=h.atk; h.hp-=e.atk;
+  }
+  // remove dead minions if any
+  h.units=h.units.filter(u=>{
+    if(u.hp<=0){
+      const c=getCell(u.x,u.y);c.textContent='';c.className='cell';
+      return false;
     }
+    return true;
+  });
+  e.units=e.units.filter(u=>{
+    if(u.hp<=0){
+      const c=getCell(u.x,u.y);c.textContent='';c.className='cell';
+      return false;
+    }
+    return true;
+  });
+  if(e.hp<=0){
+    alert('Enemy defeated!');
+    renderLocations();
+  } else if(h.hp<=0){
+    alert('You were defeated!');
+    renderLocations();
   }
 }
 
@@ -322,6 +407,21 @@ function renderArenas(){const div=document.getElementById('arenas');div.innerHTM
 
 function renderAdmin(){const c=document.getElementById('adminContent');c.innerHTML='<p>Select a section</p>';}
 window.showAdmin=section=>{const c=document.getElementById('adminContent');if(section==='cards'){renderAdminCards(c);} else c.textContent='TODO';};
-function renderAdminCards(container){container.innerHTML='';const form=document.createElement('div');form.innerHTML='<h3>New Card</h3><input id="acName" placeholder="Name"><select id="acType"><option value="hero">Hero</option><option value="minion">Minion</option><option value="spell">Spell</option><option value="item">Item</option></select><button id="createCard">Create</button>';
-container.appendChild(form);document.getElementById('createCard').onclick=()=>{const id='c'+Date.now();const name=document.getElementById('acName').value;const type=document.getElementById('acType').value;const card={id,name,type,rarity:'common',img:'https://via.placeholder.com/100',info:''};data.cards.push(card);addCopies(card.id,1);save();alert('Card created');};}
+function renderAdminCards(container){
+  container.innerHTML='';
+  const form=document.createElement('div');
+  form.innerHTML='<h3>New Card</h3><input id="acName" placeholder="Name">'+
+    '<input id="acCost" type="number" placeholder="Cost" value="0">'+
+    '<select id="acType"><option value="hero">Hero</option><option value="minion">Minion</option><option value="spell">Spell</option><option value="item">Item</option></select>'+
+    '<button id="createCard">Create</button>';
+  container.appendChild(form);
+  document.getElementById('createCard').onclick=()=>{
+    const id='c'+Date.now();
+    const name=document.getElementById('acName').value;
+    const type=document.getElementById('acType').value;
+    const cost=Number(document.getElementById('acCost').value)||0;
+    const card={id,name,type,cost,rarity:'common',img:'https://via.placeholder.com/100',info:''};
+    data.cards.push(card);addCopies(card.id,1);save();alert('Card created');
+  };
+}
 })();
